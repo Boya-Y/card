@@ -23,6 +23,7 @@
           <div class="piles">
             <span>抽牌堆：<strong id="draw-count"></strong></span>
             <span>弃牌堆：<strong id="discard-count"></strong></span>
+            <button id="deck-link" class="link" aria-haspopup="dialog" aria-controls="deck-modal">牌库</button>
           </div>
         </div>
         <div class="enemy-panel">
@@ -38,7 +39,13 @@
       <main class="arena">
         <div id="map" class="map" style="display:none"></div>
         <div id="log" class="log"></div>
-        <div id="hand" class="hand"></div>
+        <div id="hand-wrap" class="hand-wrap">
+          <div id="hand" class="hand"></div>
+          <div class="hand-fade left" aria-hidden="true"></div>
+          <div class="hand-fade right" aria-hidden="true"></div>
+        </div>
+        <div id="hand-hint" class="hand-hint" role="note">← 滑动查看更多 →</div>
+      </div>
       </main>
 
       <footer class="controls">
@@ -55,6 +62,18 @@
         <div id="reward-options" class="reward-options"></div>
         <div class="modal-actions">
           <button id="skip-reward" class="btn">跳过</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 牌库弹窗 -->
+    <div id="deck-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="deck-title">
+      <div class="modal-backdrop"></div>
+      <div class="modal-panel">
+        <h2 id="deck-title">你的牌库</h2>
+        <div id="deck-list" class="deck-list"></div>
+        <div class="modal-actions">
+          <button id="close-deck" class="btn">关闭</button>
         </div>
       </div>
     </div>

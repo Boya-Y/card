@@ -66,36 +66,17 @@ function draw(n) {
   updateHUD();
 }
 
-function renderHand() {
-  const handEl = document.getElementById('hand');
-  handEl.innerHTML = '';
-  state.hand.forEach((card, idx) => {
-    const el = document.createElement('div');
-    el.className = 'card';
-
-    const title = document.createElement('h3');
-    title.textContent = card.name;
-
-    const meta = document.createElement('div');
-    meta.className = 'meta';
-    meta.innerHTML = `<span>费用: ${card.cost}</span><span>${card.type === 'attack' ? `伤害 ${card.damage}` : `格挡 ${card.block || 0}`}</span>`;
-
-    const desc = document.createElement('div');
-    desc.className = 'desc';
-    desc.textContent = card.desc;
-
-    const btn = document.createElement('button');
-    btn.className = 'btn';
-    btn.textContent = '打出';
-    btn.disabled = state.energy < card.cost || state.inReward || isBattleOver() || state.inMap;
-    btn.onclick = () => playCard(idx);
-
-    el.appendChild(title);
-    el.appendChild(meta);
-    el.appendChild(desc);
-    el.appendChild(btn);
-    handEl.appendChild(el);
-  });
+function updateHandWrapVisibility(){
+  const wrap = document.getElementById('hand-wrap');
+  const hint = document.getElementById('hand-hint');
+  if (!wrap) return;
+  const show = !state.inMap && !state.inReward && !isBattleOver();
+  wrap.style.display = show ? 'block' : 'none';
+  // 仅在进入战斗且已有手牌，且未看过提示时显示
+  if (hint) {
+    const canShowHint = show && state.hand && state.hand.length > 0 && !localStorage.getItem('handHintSeen');
+    hint.style.display = canShowHint ? 'block' : 'none';
+  }
 }
 
 // 飘字工具
@@ -222,11 +203,42 @@ function isBattleOver() {
   return state.player.hp <= 0 || state.enemy.hp <= 0 || state.inReward;
 }
 
+function renderHand() {
+  const handEl = document.getElementById('hand');
+  handEl.innerHTML = '';
+  state.hand.forEach((card, idx) => {
+    const el = document.createElement('div');
+    el.className = 'card';
+
+    const title = document.createElement('h3');
+    title.textContent = card.name;
+
+    const meta = document.createElement('div');
+    meta.className = 'meta';
+    meta.innerHTML = `<span>费用: ${card.cost}</span><span>${card.type === 'attack' ? `伤害 ${card.damage}` : `格挡 ${card.block || 0}`}</span>`;
+
+    const desc = document.createElement('div');
+    desc.className = 'desc';
+    desc.textContent = card.desc;
+
+    const btn = document.createElement('button');
+    btn.className = 'btn';
+    btn.textContent = '打出';
+    btn.disabled = state.energy < card.cost || state.inReward || isBattleOver() || state.inMap;
+    btn.onclick = () => playCard(idx);
+
+    el.appendChild(title);
+    el.appendChild(meta);
+    el.appendChild(desc);
+    el.appendChild(btn);
+    handEl.appendChild(el);
+  });
+}
 function checkWinLose() {
   if (state.enemy.hp <= 0) {
     document.getElementById('end-turn').disabled = true;
+    updateHandWrapVisibility();
     if (state.layerIndex >= state.totalLayers - 1) {
-      // 最后一层最后一个战斗胜利——进入奖励后结束
       log('战斗胜利！请选择一张卡作为奖励');
       openReward(true);
     } else {
@@ -239,6 +251,7 @@ function checkWinLose() {
     log('你失败了…');
     document.getElementById('end-turn').disabled = true;
     document.getElementById('restart').style.display = 'inline-block';
+    updateHandWrapVisibility();
     return true;
   }
   return false;
@@ -277,8 +290,9 @@ function onMapNodeSelect(node) {
 function enterMap() {
   state.inMap = true;
   document.getElementById('map').style.display = 'block';
-  document.getElementById('hand').style.display = 'none';
+  document.getElementById('hand').style.display = ''; // 由 hand-wrap 统一控制
   document.getElementById('end-turn').disabled = true;
+  updateHandWrapVisibility();
   renderMap();
   updateHUD();
 }
@@ -287,6 +301,7 @@ function exitMap() {
   state.inMap = false;
   document.getElementById('map').style.display = 'none';
   document.getElementById('hand').style.display = '';
+  updateHandWrapVisibility();
   updateHUD();
 }
 
@@ -324,13 +339,14 @@ function startBattle() {
   state.hand = [];
   updateHUD();
   renderHand();
+  updateHandWrapVisibility();
   log(`第 ${state.layerIndex + 1} 层的战斗开始！`);
-  // 修复：进入战斗后应立即开始玩家回合，启用“结束回合”按钮
   startPlayerTurn();
 }
 
 function openReward(isFinalLayer = false) {
   state.inReward = true;
+  updateHandWrapVisibility();
   const modal = document.getElementById('reward-modal');
   const optionsEl = document.getElementById('reward-options');
   optionsEl.innerHTML = '';
@@ -372,6 +388,7 @@ function closeReward() {
   const modal = document.getElementById('reward-modal');
   modal.classList.add('hidden');
   state.inReward = false;
+  updateHandWrapVisibility();
   updateHUD();
 }
 
@@ -415,3 +432,108 @@ window.addEventListener('DOMContentLoaded', () => {
   }
   setupRun();
 });
+
+function updateHandScrollHints(){
+  const wrap = document.getElementById('hand-wrap');
+  const hand = document.getElementById('hand');
+  const leftFade = document.querySelector('.hand-fade.left');
+  const rightFade = document.querySelector('.hand-fade.right');
+  const hint = document.getElementById('hand-hint');
+  if (!wrap || !hand) return;
+  const maxScroll = hand.scrollWidth - hand.clientWidth;
+  const atLeft = hand.scrollLeft <= 2;
+  const atRight = hand.scrollLeft >= maxScroll - 2;
+  if (leftFade) leftFade.style.opacity = atLeft ? '0' : '1';
+  if (rightFade) rightFade.style.opacity = atRight ? '0' : '1';
+  // 首次滑动：添加 .scrolled，并写入本地标记，后续不再显示提示
+  if (hint && !localStorage.getItem('handHintSeen')) {
+    if (hand.scrollLeft > 4) {
+      wrap.classList.add('scrolled');
+      localStorage.setItem('handHintSeen','1');
+      // 直接隐藏提示（在 CSS 已用 display:none 处理）
+      hint.style.display = 'none';
+    }
+  }
+}
+
+// 在 renderHand 之后刷新提示和可见性
+const _renderHand = renderHand;
+renderHand = function(){
+  _renderHand();
+  requestAnimationFrame(() => {
+    updateHandScrollHints();
+    updateHandWrapVisibility();
+  });
+}
+
+window.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('end-turn').addEventListener('click', endPlayerTurn);
+  document.getElementById('restart').addEventListener('click', restart);
+  const skipBtn = document.getElementById('skip-reward');
+  if (skipBtn) {
+    skipBtn.addEventListener('click', () => {
+      goToNextLayer();
+    });
+  }
+  setupRun();
+  const hand = document.getElementById('hand');
+  if (hand) {
+    hand.addEventListener('scroll', updateHandScrollHints, { passive: true });
+  }
+  // 牌库入口与关闭
+  const deckLink = document.getElementById('deck-link');
+  if (deckLink) deckLink.addEventListener('click', openDeckModal);
+  const closeDeckBtn = document.getElementById('close-deck');
+  if (closeDeckBtn) closeDeckBtn.addEventListener('click', closeDeckModal);
+  const deckModal = document.getElementById('deck-modal');
+  if (deckModal) {
+    const backdrop = deckModal.querySelector('.modal-backdrop');
+    if (backdrop) backdrop.addEventListener('click', closeDeckModal);
+  }
+  document.addEventListener('keydown', (e)=>{
+    if (e.key === 'Escape') closeDeckModal();
+  });
+  // 初始根据本地标记设置提示可见性
+  if (localStorage.getItem('handHintSeen')) {
+    const wrap = document.getElementById('hand-wrap');
+    if (wrap) wrap.classList.add('scrolled');
+    const hint = document.getElementById('hand-hint');
+    if (hint) hint.style.display = 'none';
+  }
+  requestAnimationFrame(updateHandScrollHints);
+  updateHandWrapVisibility();
+});
+
+// 牌库弹窗逻辑
+function renderDeckList(){
+  const list = document.getElementById('deck-list');
+  if (!list) return;
+  list.innerHTML = '';
+  state.deck.forEach((card) => {
+    const el = document.createElement('div');
+    el.className = 'card';
+    const title = document.createElement('h3');
+    title.textContent = card.name;
+    const meta = document.createElement('div');
+    meta.className = 'meta';
+    meta.innerHTML = `<span>费用: ${card.cost}</span><span>${card.type === 'attack' ? `伤害 ${card.damage}` : `格挡 ${card.block || 0}`}</span>`;
+    const desc = document.createElement('div');
+    desc.className = 'desc';
+    desc.textContent = card.desc;
+    el.appendChild(title);
+    el.appendChild(meta);
+    el.appendChild(desc);
+    list.appendChild(el);
+  });
+}
+function openDeckModal(){
+  const modal = document.getElementById('deck-modal');
+  if (!modal) return;
+  renderDeckList();
+  modal.classList.remove('hidden');
+}
+function closeDeckModal(){
+  const modal = document.getElementById('deck-modal');
+  if (!modal) return;
+  modal.classList.add('hidden');
+}
