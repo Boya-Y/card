@@ -19,6 +19,7 @@
             <span>生命：<strong id="player-hp"></strong>/<span id="player-maxhp"></span></span>
             <span>格挡：<strong id="player-block"></strong></span>
             <span>能量：<strong id="energy"></strong></span>
+            <span>金币：<strong id="gold"></strong></span>
           </div>
           <div class="piles">
             <span>抽牌堆：<strong id="draw-count"></strong></span>
@@ -74,6 +75,46 @@
         <div id="deck-list" class="deck-list"></div>
         <div class="modal-actions">
           <button id="close-deck" class="btn">关闭</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 商店弹窗 -->
+    <div id="shop-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="shop-title">
+      <div class="modal-backdrop"></div>
+      <div class="modal-panel">
+        <h2 id="shop-title">商店</h2>
+        <div class="shop-list" id="shop-list"></div>
+        <div class="modal-actions">
+          <button id="close-shop" class="btn">离开</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 获得遗物弹窗 -->
+    <div id="relic-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="relic-title">
+      <div class="modal-backdrop"></div>
+      <div class="modal-panel">
+        <h2 id="relic-title">获得遗物</h2>
+        <div id="relic-info" class="relic-info"></div>
+        <div class="modal-actions">
+          <button id="close-relic" class="btn">收下</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 胜利统计弹窗 -->
+    <div id="victory-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="victory-title">
+      <div class="modal-backdrop"></div>
+      <div class="modal-panel">
+        <h2 id="victory-title">胜利！</h2>
+        <ul class="victory-stats">
+          <li>击败敌人数：<strong id="stat-enemies"></strong></li>
+          <li>获得卡牌数：<strong id="stat-cards"></strong></li>
+          <li>获得遗物数：<strong id="stat-relics"></strong></li>
+        </ul>
+        <div class="modal-actions">
+          <button id="close-victory" class="btn">完成</button>
         </div>
       </div>
     </div>

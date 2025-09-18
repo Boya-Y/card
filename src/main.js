@@ -1,6 +1,7 @@
 import { CARD_DEFS, STARTING_DECK, REWARD_POOL, createCardById, makeDeckFromIds } from './config/cards.js'
 import { PLAYER_CONFIG, ENEMY_CONFIG, makeEnemy } from './config/entities.js'
 import { MAP_LAYERS, getLayerCount, getNodesOfLayer } from './config/map.js'
+import { RELIC_DEFS, RELIC_POOL_NORMAL, RELIC_POOL_BOSS, createRelicById } from './config/relics.js'
 
 // 全局状态（竖屏版）
 const state = {
@@ -17,6 +18,14 @@ const state = {
   layerIndex: 0,
   totalLayers: getLayerCount(),
   currentEnemyId: null,
+  // 新增：金币、遗物、统计、当前节点类型、是否刚赢得战斗、加成缓存与商店状态
+  gold: 100,
+  relics: [], // 数组：{id,name,...}
+  stats: { enemies: 0, cards: 0, relics: 0 },
+  currentNodeType: null,
+  justWonBattle: false,
+  bonus: { energyPlus: 0, drawPlus: 0, healPlus: 0, maxHpPlus: 0 },
+  shop: null,
 };
 
 function shuffle(arr) {
@@ -47,6 +56,8 @@ function updateHUD() {
   document.getElementById('energy').textContent = state.energy;
   document.getElementById('draw-count').textContent = state.drawPile.length;
   document.getElementById('discard-count').textContent = state.discardPile.length;
+  const goldEl = document.getElementById('gold');
+  if (goldEl) goldEl.textContent = state.gold;
   const p = document.getElementById('progress');
   if (p) p.textContent = `第 ${Math.min(state.layerIndex + 1, state.totalLayers)} / ${state.totalLayers} 层`;
 }
@@ -161,9 +172,10 @@ function enemyChooseIntent() {
 
 function startPlayerTurn() {
   state.turn += 1;
-  state.energy = PLAYER_CONFIG.startEnergy;
+  state.energy = PLAYER_CONFIG.startEnergy + (state.bonus?.energyPlus || 0);
   state.player.block = 0; // 回合开始清空玩家格挡
-  draw(Math.max(0, PLAYER_CONFIG.drawPerTurn - state.hand.length)); // 补到配置张数
+  const targetDraw = (PLAYER_CONFIG.drawPerTurn + (state.bonus?.drawPlus || 0));
+  draw(Math.max(0, targetDraw - state.hand.length)); // 补到配置张数
   enemyChooseIntent();
   log(`回合 ${state.turn} 开始`);
   updateHUD();
@@ -238,13 +250,7 @@ function checkWinLose() {
   if (state.enemy.hp <= 0) {
     document.getElementById('end-turn').disabled = true;
     updateHandWrapVisibility();
-    if (state.layerIndex >= state.totalLayers - 1) {
-      log('战斗胜利！请选择一张卡作为奖励');
-      openReward(true);
-    } else {
-      log('战斗胜利！请选择一张卡作为奖励');
-      openReward(false);
-    }
+    onBattleVictory();
     return true;
   }
   if (state.player.hp <= 0) {
@@ -266,8 +272,9 @@ function renderMap() {
   row.className = 'map-row';
   nodes.forEach((node) => {
     const btn = document.createElement('button');
-    btn.className = 'node ' + (node.type === 'rest' ? 'rest' : '');
-    btn.textContent = node.type === 'fight' ? '战斗' : (node.type === 'rest' ? '休息' : node.type);
+    btn.className = 'node ' + (node.type || '');
+    const labelMap = { fight: '战斗', rest: '休息', shop: '商店', elite: '精英', boss: 'Boss' };
+    btn.textContent = labelMap[node.type] || node.type;
     btn.onclick = () => onMapNodeSelect(node);
     row.appendChild(btn);
   });
@@ -275,8 +282,9 @@ function renderMap() {
 }
 
 function onMapNodeSelect(node) {
-  if (node.type === 'fight') {
+  if (node.type === 'fight' || node.type === 'elite' || node.type === 'boss') {
     state.currentEnemyId = node.enemy;
+    state.currentNodeType = node.type;
     exitMap();
     startBattle();
   } else if (node.type === 'rest') {
@@ -284,6 +292,8 @@ function onMapNodeSelect(node) {
     state.player.hp = Math.min(state.player.maxHp, state.player.hp + heal);
     log(`你在休息点恢复了 ${heal} 点生命`);
     goToNextLayer();
+  } else if (node.type === 'shop') {
+    openShop();
   }
 }
 
@@ -311,8 +321,18 @@ function goToNextLayer() {
     // 冒险完成
     closeReward();
     log('通关！你击败了所有敌人！');
-    document.getElementById('restart').style.display = 'inline-block';
+    openVictory();
     return;
+  }
+  // 战后治疗（如果刚刚从战斗获胜）
+  if (state.justWonBattle){
+    const heal = (PLAYER_CONFIG.healAfterBattle || 0) + (state.bonus?.healPlus || 0);
+    if (heal > 0){
+      const before = state.player.hp;
+      state.player.hp = Math.min(state.player.maxHp, state.player.hp + heal);
+      log(`战后恢复 ${state.player.hp - before} 点生命`);
+    }
+    state.justWonBattle = false;
   }
   closeReward();
   enterMap();
@@ -331,7 +351,7 @@ function enemyFromCurrentNode() {
 
 function startBattle() {
   state.turn = 0;
-  state.energy = PLAYER_CONFIG.startEnergy;
+  state.energy = PLAYER_CONFIG.startEnergy + (state.bonus?.energyPlus || 0);
   state.player.block = 0;
   state.enemy = enemyFromCurrentNode();
   state.drawPile = shuffle(state.deck.slice());
@@ -400,6 +420,7 @@ function pickRewardOptions(n) {
 
 function addCardToDeck(card) {
   state.deck.push({ ...card });
+  state.stats.cards += 1;
   log(`加入牌组：${card.name}`);
 }
 
@@ -411,6 +432,13 @@ function setupRun() {
   state.totalLayers = getLayerCount();
   state.player = { hp: PLAYER_CONFIG.maxHp, maxHp: PLAYER_CONFIG.maxHp, block: 0 };
   state.inReward = false;
+  state.gold = 100;
+  state.relics = [];
+  state.stats = { enemies: 0, cards: 0, relics: 0 };
+  state.currentNodeType = null;
+  state.justWonBattle = false;
+  state.bonus = { energyPlus: 0, drawPlus: 0, healPlus: 0, maxHpPlus: 0 };
+  recalcBonuses();
   document.getElementById('log').innerHTML = '';
   document.getElementById('restart').style.display = 'none';
   enterMap();
@@ -422,6 +450,8 @@ function restart() {
 
 // 绑定按钮
 window.addEventListener('DOMContentLoaded', () => {
+  if (window.__uiInitDone) return;
+  window.__uiInitDone = true;
   document.getElementById('end-turn').addEventListener('click', endPlayerTurn);
   document.getElementById('restart').addEventListener('click', restart);
   const skipBtn = document.getElementById('skip-reward');
@@ -430,51 +460,29 @@ window.addEventListener('DOMContentLoaded', () => {
       goToNextLayer();
     });
   }
-  setupRun();
-});
-
-function updateHandScrollHints(){
-  const wrap = document.getElementById('hand-wrap');
-  const hand = document.getElementById('hand');
-  const leftFade = document.querySelector('.hand-fade.left');
-  const rightFade = document.querySelector('.hand-fade.right');
-  const hint = document.getElementById('hand-hint');
-  if (!wrap || !hand) return;
-  const maxScroll = hand.scrollWidth - hand.clientWidth;
-  const atLeft = hand.scrollLeft <= 2;
-  const atRight = hand.scrollLeft >= maxScroll - 2;
-  if (leftFade) leftFade.style.opacity = atLeft ? '0' : '1';
-  if (rightFade) rightFade.style.opacity = atRight ? '0' : '1';
-  // 首次滑动：添加 .scrolled，并写入本地标记，后续不再显示提示
-  if (hint && !localStorage.getItem('handHintSeen')) {
-    if (hand.scrollLeft > 4) {
-      wrap.classList.add('scrolled');
-      localStorage.setItem('handHintSeen','1');
-      // 直接隐藏提示（在 CSS 已用 display:none 处理）
-      hint.style.display = 'none';
-    }
+  // 商店关闭与遗物/胜利确认
+  const closeShopBtn = document.getElementById('close-shop');
+  if (closeShopBtn) closeShopBtn.addEventListener('click', closeShop);
+  const shopModal = document.getElementById('shop-modal');
+  if (shopModal){
+    const backdrop = shopModal.querySelector('.modal-backdrop');
+    if (backdrop) backdrop.addEventListener('click', closeShop);
   }
-}
-
-// 在 renderHand 之后刷新提示和可见性
-const _renderHand = renderHand;
-renderHand = function(){
-  _renderHand();
-  requestAnimationFrame(() => {
-    updateHandScrollHints();
-    updateHandWrapVisibility();
-  });
-}
-
-window.addEventListener('DOMContentLoaded', () => {
-  document.getElementById('end-turn').addEventListener('click', endPlayerTurn);
-  document.getElementById('restart').addEventListener('click', restart);
-  const skipBtn = document.getElementById('skip-reward');
-  if (skipBtn) {
-    skipBtn.addEventListener('click', () => {
-      goToNextLayer();
-    });
+  const closeRelicBtn = document.getElementById('close-relic');
+  if (closeRelicBtn) closeRelicBtn.addEventListener('click', acceptRelic);
+  const relicModal = document.getElementById('relic-modal');
+  if (relicModal){
+    const backdrop = relicModal.querySelector('.modal-backdrop');
+    if (backdrop) backdrop.addEventListener('click', acceptRelic);
   }
+  const closeVictoryBtn = document.getElementById('close-victory');
+  if (closeVictoryBtn) closeVictoryBtn.addEventListener('click', closeVictory);
+  const victoryModal = document.getElementById('victory-modal');
+  if (victoryModal){
+    const backdrop = victoryModal.querySelector('.modal-backdrop');
+    if (backdrop) backdrop.addEventListener('click', closeVictory);
+  }
+  
   setupRun();
   const hand = document.getElementById('hand');
   if (hand) {
@@ -536,4 +544,202 @@ function closeDeckModal(){
   const modal = document.getElementById('deck-modal');
   if (!modal) return;
   modal.classList.add('hidden');
+}
+
+// 新增：战斗胜利流程（精英/ Boss 掉落遗物 + 选牌奖励）
+function onBattleVictory(){
+  state.stats.enemies += 1;
+  state.justWonBattle = true;
+  if (state.currentNodeType === 'elite') {
+    openRelicReward('elite');
+  } else if (state.currentNodeType === 'boss') {
+    openRelicReward('boss');
+  } else {
+    log('战斗胜利！请选择一张卡作为奖励');
+    openReward(false);
+  }
+}
+
+function openRelicReward(kind){
+  const pool = kind === 'boss' ? RELIC_POOL_BOSS.slice() : RELIC_POOL_NORMAL.slice();
+  // 过滤已拥有的，尽量不重复；若全部拥有则仍可重复
+  const owned = new Set(state.relics.map(r=>r.id));
+  const available = pool.filter(id => !owned.has(id));
+  const pickPool = available.length>0 ? available : pool;
+  const id = pickPool[Math.floor(Math.random() * pickPool.length)];
+  const relic = createRelicById(id);
+  state._pendingRelic = relic;
+  const modal = document.getElementById('relic-modal');
+  const info = document.getElementById('relic-info');
+  if (info) info.innerHTML = `<div class="relic-name"><strong>${relic.name}</strong></div><div class="relic-desc">${relic.desc}</div>`;
+  if (modal) modal.classList.remove('hidden');
+}
+
+function acceptRelic(){
+  if (!state._pendingRelic) return;
+  addRelic(state._pendingRelic);
+  state._pendingRelic = null;
+  const modal = document.getElementById('relic-modal');
+  if (modal) modal.classList.add('hidden');
+  log('获得遗物！');
+  // 继续进入选牌奖励（最终层也同样给牌）
+  openReward(state.layerIndex >= state.totalLayers - 1);
+}
+
+function addRelic(relic){
+  // 若已拥有同ID，允许叠加仅对数值型加成有效（此处简单相加）
+  state.relics.push(relic);
+  state.stats.relics += 1;
+  recalcBonuses();
+  // 立即应用最大生命加成
+  const plus = relic.maxHpPlus || 0;
+  if (plus){
+    state.player.maxHp += plus;
+    state.player.hp += plus;
+  }
+  updateHUD();
+}
+
+function recalcBonuses(){
+  const sum = (k)=> state.relics.reduce((acc,r)=> acc + (r[k]||0), 0);
+  state.bonus = {
+    energyPlus: sum('energyPlus'),
+    drawPlus: sum('drawPlus'),
+    healPlus: sum('healAfterBattlePlus'),
+    maxHpPlus: sum('maxHpPlus'),
+  };
+}
+
+// 商店
+function openShop(){
+  // 生成商品：3张牌、2个遗物
+  const cardIds = [...REWARD_POOL];
+  shuffle(cardIds);
+  const cards = cardIds.slice(0,3).map(id=>createCardById(id));
+  const relicPool = [...RELIC_POOL_NORMAL];
+  shuffle(relicPool);
+  const relicIds = relicPool.slice(0,2);
+  state.shop = { cards, relicIds, prices: new Map() };
+  // 定价
+  cards.forEach(c=> state.shop.prices.set(c.id, 75));
+  relicIds.forEach(id=> state.shop.prices.set(id, 120));
+
+  const list = document.getElementById('shop-list');
+  if (list) {
+    const render = ()=>{
+      list.innerHTML = '';
+      const sec1 = document.createElement('div');
+      const h1 = document.createElement('h3'); h1.textContent = '卡牌'; sec1.appendChild(h1);
+      const cardWrap = document.createElement('div'); cardWrap.className = 'shop-sec';
+      state.shop.cards.forEach(card => {
+        const price = state.shop.prices.get(card.id);
+        const el = document.createElement('div'); el.className = 'shop-item card-item';
+        el.innerHTML = `<div class="title">${card.name}</div><div class="meta">费用 ${card.cost} · ${card.type==='attack'?`伤害 ${card.damage}`:`格挡 ${card.block||0}`}</div><div class="desc">${card.desc}</div><div class="price">价格：<strong>${price}</strong></div>`;
+        const btn = document.createElement('button'); btn.className = 'btn'; btn.textContent = '购买';
+        btn.disabled = state.gold < price;
+        btn.onclick = ()=>{
+          if (state.gold < price) return;
+          state.gold -= price;
+          addCardToDeck(card);
+          log(`购买卡牌：${card.name}（-${price} 金币）`);
+          // 从商店移除该卡牌并删除定价，避免重复购买
+          const idx = state.shop.cards.indexOf(card);
+          if (idx >= 0) state.shop.cards.splice(idx, 1);
+          state.shop.prices.delete(card.id);
+          updateHUD();
+          render();
+        };
+        el.appendChild(btn);
+        cardWrap.appendChild(el);
+      });
+      sec1.appendChild(cardWrap);
+      list.appendChild(sec1);
+
+      const sec2 = document.createElement('div');
+      const h2 = document.createElement('h3'); h2.textContent = '遗物'; sec2.appendChild(h2);
+      const relicWrap = document.createElement('div'); relicWrap.className = 'shop-sec';
+      state.shop.relicIds.forEach(id => {
+        const relic = createRelicById(id);
+        const price = state.shop.prices.get(id);
+        const owned = state.relics.some(r=>r.id===id);
+        const el = document.createElement('div'); el.className = 'shop-item relic-item';
+        el.innerHTML = `<div class="title">${relic.name}</div><div class="desc">${relic.desc}</div><div class="price">价格：<strong>${price}</strong></div>`;
+        const btn = document.createElement('button'); btn.className = 'btn'; btn.textContent = owned ? '已拥有' : '购买';
+        btn.disabled = owned || state.gold < price;
+        btn.onclick = ()=>{
+          if (owned || state.gold < price) return;
+          state.gold -= price;
+          addRelic(relic);
+          log(`购买遗物：${relic.name}（-${price} 金币）`);
+          // 从商店移除该遗物并删除定价，避免重复购买
+          const idx = state.shop.relicIds.findIndex(rid => rid === id);
+          if (idx >= 0) state.shop.relicIds.splice(idx, 1);
+          state.shop.prices.delete(id);
+          updateHUD();
+          render();
+        };
+        el.appendChild(btn);
+        relicWrap.appendChild(el);
+      });
+      sec2.appendChild(relicWrap);
+      list.appendChild(sec2);
+    };
+    render();
+  }
+  const modal = document.getElementById('shop-modal');
+  if (modal) modal.classList.remove('hidden');
+}
+function closeShop(){
+  const modal = document.getElementById('shop-modal');
+  if (modal) modal.classList.add('hidden');
+  state.shop = null;
+  goToNextLayer();
+}
+
+// 胜利面板
+function openVictory(){
+  const m = document.getElementById('victory-modal');
+  if (!m) return;
+  document.getElementById('stat-enemies').textContent = state.stats.enemies;
+  document.getElementById('stat-cards').textContent = state.stats.cards;
+  document.getElementById('stat-relics').textContent = state.stats.relics;
+  m.classList.remove('hidden');
+}
+function closeVictory(){
+  const m = document.getElementById('victory-modal');
+  if (m) m.classList.add('hidden');
+  document.getElementById('restart').style.display = 'inline-block';
+}
+
+function updateHandScrollHints(){
+  const wrap = document.getElementById('hand-wrap');
+  const hand = document.getElementById('hand');
+  const leftFade = document.querySelector('.hand-fade.left');
+  const rightFade = document.querySelector('.hand-fade.right');
+  const hint = document.getElementById('hand-hint');
+  if (!wrap || !hand) return;
+  const maxScroll = hand.scrollWidth - hand.clientWidth;
+  const atLeft = hand.scrollLeft <= 2;
+  const atRight = hand.scrollLeft >= maxScroll - 2;
+  if (leftFade) leftFade.style.opacity = atLeft ? '0' : '1';
+  if (rightFade) rightFade.style.opacity = atRight ? '0' : '1';
+  // 首次滑动：添加 .scrolled，并写入本地标记，后续不再显示提示
+  if (hint && !localStorage.getItem('handHintSeen')) {
+    if (hand.scrollLeft > 4) {
+      wrap.classList.add('scrolled');
+      localStorage.setItem('handHintSeen','1');
+      // 直接隐藏提示（在 CSS 已用 display:none 处理）
+      hint.style.display = 'none';
+    }
+  }
+}
+
+// 在 renderHand 之后刷新提示和可见性
+const _renderHand = renderHand;
+renderHand = function(){
+  _renderHand();
+  requestAnimationFrame(() => {
+    updateHandScrollHints();
+    updateHandWrapVisibility();
+  });
 }

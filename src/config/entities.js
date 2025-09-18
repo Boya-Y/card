@@ -12,6 +12,7 @@ export const ENEMY_CONFIG = {
   normal1: { id: 'normal1', name: '史莱姆', hp: 50, maxHp: 50, ai: 'basic' },
   normal2: { id: 'normal2', name: '史莱姆', hp: 60, maxHp: 60, ai: 'basic' },
   elite1:  { id: 'elite1',  name: '精英史莱姆', hp: 90, maxHp: 90, ai: 'basic' },
+  boss1:   { id: 'boss1',   name: '史莱姆王', hp: 160, maxHp: 160, ai: 'basic' },
 };
 
 export function makeEnemy(def){
