@@ -1,0 +1,52 @@
+:root{--bg:#0e0f13;--panel:#161922;--text:#e6e8ef;--muted:#9aa3b2;--accent:#57d897;--danger:#ff6b6b;--energy:#ffd166}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,"Apple Color Emoji","Segoe UI Emoji"}
+
+/* 竖屏优先布局 */
+.app{max-width:480px;margin:0 auto;padding:12px;display:flex;flex-direction:column;gap:10px;min-height:100dvh}
+.topbar{display:flex;justify-content:center;align-items:center;background:var(--panel);border-radius:10px;padding:8px;color:var(--muted)}
+.hud{display:flex;flex-direction:column;gap:10px}
+.player-panel,.enemy-panel{background:var(--panel);border-radius:12px;padding:12px}
+.stats{display:flex;gap:12px;flex-wrap:wrap;color:var(--muted);font-size:14px}
+.piles{margin-top:6px;display:flex;gap:16px;color:var(--muted)}
+
+.arena{background:linear-gradient(180deg,#161922,#10131a);border-radius:12px;min-height:320px;padding:10px;display:flex;flex-direction:column;gap:10px}
+.log{height:120px;overflow:auto;background:#0f1218;border-radius:8px;padding:8px;font-size:13px;color:#cbd5e1}
+.hand{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
+.card{background:#1d2230;border:1px solid #2b3346;border-radius:10px;padding:10px;width:46%;max-width:200px;box-shadow:0 4px 12px rgba(0,0,0,.3)}
+.card h3{margin:0 0 6px;font-size:16px}
+.card .meta{display:flex;justify-content:space-between;font-size:12px;color:var(--muted)}
+.card .desc{margin-top:6px;color:#e2e8f0;font-size:13px;min-height:36px}
+.btn{background:#2a3146;color:#e6e8ef;border:none;border-radius:8px;padding:10px 16px;cursor:pointer}
+.btn.primary{background:var(--accent);color:#08130f}
+.btn:disabled{opacity:.6;cursor:not-allowed}
+.controls{display:flex;gap:8px;justify-content:space-between;position:sticky;bottom:0}
+
+/* 模态弹窗 */
+.modal.hidden{display:none}
+.modal{position:fixed;inset:0;display:grid;place-items:center}
+.modal-backdrop{position:absolute;inset:0;background:rgba(0,0,0,.5)}
+.modal-panel{position:relative;background:#111522;border:1px solid #2b3346;border-radius:12px;max-width:480px;width:92%;padding:16px;box-shadow:0 10px 24px rgba(0,0,0,.5)}
+.reward-options{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin-top:12px}
+.reward-card{background:#1d2230;border:1px solid #2b3346;border-radius:10px;padding:10px;width:46%;max-width:200px}
+.modal-actions{display:flex;justify-content:flex-end;margin-top:12px}
+
+/* 大屏优化 */
+@media (min-width:720px){
+  .app{max-width:900px}
+  .hud{display:grid;grid-template-columns:1fr 1fr}
+  .card,.reward-card{width:180px}
+}
+
+/* 地图视图 */
+.map{background:linear-gradient(180deg,#151824,#0e1017);border-radius:12px;padding:10px;display:flex;flex-direction:column;gap:10px}
+.map-row{display:flex;justify-content:center;gap:12px}
+.node{background:#1b2030;border:1px solid #2b3346;border-radius:999px;padding:8px 12px;color:#e6e8ef;cursor:pointer}
+.node.active{background:var(--accent);color:#08130f}
+.node.rest{background:#2a3146}
+
+/* 飘字效果 */
+.float-text{position:absolute;pointer-events:none;animation:floatUp .9s ease-out forwards;font-weight:700}
+.float-dmg{color:var(--danger);text-shadow:0 1px 2px rgba(0,0,0,.5)}
+.float-block{color:var(--accent);text-shadow:0 1px 2px rgba(0,0,0,.5)}
+@keyframes floatUp{0%{transform:translateY(0);opacity:1}100%{transform:translateY(-24px);opacity:0}}
